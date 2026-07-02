@@ -14,17 +14,18 @@ class ChatMLStrategy(PromptStrategy):
     def __init__(
         self,
         tokenizer: AutoTokenizer,
-        user_start: str = "<｜im▁start｜>user\n",
-        user_end: str = "<｜im▁end｜>\n",
-        assistant_start: str = "<｜im▁start｜>assistant\n",
-        assistant_end: str = "<｜im▁end｜>\n",
+        user_start: str = "<｜im▁start｜>user",
+        user_end: str = "<｜im▁end｜>",
+        assistant_start: str = "<｜im▁start｜>assistant",
+        assistant_end: str = "<｜im▁end｜>",
     ):
         super().__init__(tokenizer)
+        nl_id = tokenizer.encode("a\nb", add_special_tokens=False)[1]
 
-        self._user_start_ids = self._encode_format(user_start)
-        self._user_end_ids = self._encode_format(user_end)
-        self._assistant_start_ids = self._encode_format(assistant_start)
-        self._assistant_end_ids = self._encode_format(assistant_end)
+        self._user_start_ids = self._encode_format(user_start) + [nl_id]
+        self._user_end_ids = self._encode_format(user_end) + [nl_id]
+        self._assistant_start_ids = self._encode_format(assistant_start) + [nl_id]
+        self._assistant_end_ids = self._encode_format(assistant_end) + [nl_id]
 
     @property
     def name(self) -> str:
