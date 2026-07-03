@@ -117,14 +117,17 @@ def cache_jsonl(
 ) -> List[str]:
     """Tokenize JSONL files and pack them into HDF5 storage.
 
+    BFD packs in group_size-bounded batches to avoid O(N²), then all
+    packed chunks are merged and saved as one HDF5 file per input file.
+
     Args:
         files: List of JSONL file paths.
         output_dir: H5 output directory.
         processor: Initialized Processor instance.
         pack_size: Packing length, <=0 means no packing.
         pad_value: Padding value.
-        group_size: Merge every this many packed chunks into one tensor,
-            <=0 means no merging.
+        group_size: BFD batch granularity (token count threshold for each
+            packing batch) and merge granularity, <=0 means no merging.
         pack_algo: Packing algorithm: 'bfd' (default), 'ffd',
             'greedy'. Only used when pack_size > 0.
 
@@ -135,10 +138,21 @@ def cache_jsonl(
     output_files: List[str] = []
     output_keys = processor.output_keys
 
+    dtypes = (
+        dict(processor.schema.output_fields)
+        if processor.schema is not None
+        else None
+    )
+    pad_values = {k: (0 if k == "position_ids" else (False if k.endswith("_mask") else pad_value)) for k in output_keys}
+
+    target_tokens = group_size * pack_size if group_size > 0 and pack_size > 0 else 0
+
     for file_path in files:
         file_name = Path(file_path).stem
 
-        arrows: Dict[str, List] = {key: [] for key in output_keys}
+        all_packed: Dict[str, List[Tensor]] = {key: [] for key in output_keys}
+        arrows_batch: Dict[str, List] = {key: [] for key in output_keys}
+        batch_tokens: int = 0
 
         with open(file_path, "r", encoding="utf-8") as f:
             for line_num, line in enumerate(
@@ -148,7 +162,9 @@ def cache_jsonl(
                     result = processor.process(json.loads(line))
                     if result is not None:
                         for key in output_keys:
-                            arrows[key].append(result[key])
+                            arrows_batch[key].append(result[key])
+                        if target_tokens > 0:
+                            batch_tokens += int(result[output_keys[0]].shape[0])
                 except json.JSONDecodeError as e:
                     logger.warning(
                         f"JSON decode error in {file_path} line {line_num}: {e}. Skipping line."
@@ -160,26 +176,35 @@ def cache_jsonl(
                     )
                     continue
 
-        if not arrows[output_keys[0]]:
+                if target_tokens > 0 and batch_tokens >= target_tokens:
+                    packed = pack_tensors(arrows_batch, pack_size, pad_value, dtypes, pad_values=pad_values, algo=pack_algo)
+                    for key in output_keys:
+                        all_packed[key].extend(packed[key])
+                        arrows_batch[key] = []
+                    batch_tokens = 0
+
+        if arrows_batch[output_keys[0]]:
+            if pack_size > 0:
+                packed = pack_tensors(arrows_batch, pack_size, pad_value, dtypes, pad_values=pad_values, algo=pack_algo)
+                for key in output_keys:
+                    all_packed[key].extend(packed[key])
+            else:
+                for key in output_keys:
+                    all_packed[key].extend(arrows_batch[key])
+
+        if not all_packed[output_keys[0]]:
             logger.warning(f"No valid samples in {file_path}, skipping")
             continue
 
-        if pack_size > 0:
-            dtypes = (
-                dict(processor.schema.output_fields)
-                if processor.schema is not None
-                else None
-            )
-            pad_values = {k: (0 if k == "position_ids" else (False if k.endswith("_mask") else pad_value)) for k in output_keys}
-            output = pack_tensors(arrows, pack_size, pad_value, dtypes, pad_values=pad_values, algo=pack_algo)
-        else:
-            output = arrows
-
-        if group_size > 0 and output[output_keys[0]]:
+        if pack_size <= 0:
+            output = all_packed
+        elif group_size > 0 and all_packed[output_keys[0]]:
             output = {
                 key: merge_tensors(tensors, group_size)
-                for key, tensors in output.items()
+                for key, tensors in all_packed.items()
             }
+        else:
+            output = all_packed
 
         h5_path = HDF5Handler.save(output_dir, file_name, output)
         output_files.append(h5_path)

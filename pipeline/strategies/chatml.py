@@ -20,7 +20,7 @@ class ChatMLStrategy(PromptStrategy):
         assistant_end: str = "<｜im▁end｜>",
     ):
         super().__init__(tokenizer)
-        nl_id = tokenizer.token_to_id("\n")
+        nl_id = tokenizer.encode("a\nb", add_special_tokens=False)[1]
 
         self._user_start_ids = self._encode_format(user_start) + [nl_id]
         self._user_end_ids = self._encode_format(user_end) + [nl_id]
