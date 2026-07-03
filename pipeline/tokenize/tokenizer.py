@@ -266,6 +266,12 @@ class AutoTokenizer:
 
         return self._tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
 
+    def token_to_id(self, token: str) -> Optional[int]:
+        """Convert a token string to its integer ID."""
+        if self._tokenizer is None:
+            raise RuntimeError("Tokenizer not initialized.")
+        return self._tokenizer.token_to_id(token)
+
     def __len__(self) -> int:
         if self._tokenizer is None:
             return 0

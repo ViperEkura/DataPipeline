@@ -120,4 +120,4 @@ class TestCacheJsonl:
                 pack_size=-1,
                 pad_value=0,
             )
-            assert len(output_files) == 1
+            assert len(output_files) == 0

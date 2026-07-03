@@ -44,6 +44,13 @@ def main():
         help="Prompt strategy: chatml, alpaca (default: chatml)",
     )
     parser.add_argument(
+        "-a",
+        "--pack-algo",
+        default=None,
+        choices=[None, "bfd", "ffd", "greedy"],
+        help="Packing algorithm: bfd (default), ffd, greedy",
+    )
+    parser.add_argument(
         "-p",
         "--pack-size",
         type=int,
@@ -51,7 +58,14 @@ def main():
         help="Pack size, <=0 to disable (default: -1)",
     )
     parser.add_argument(
-        "--pad-value", type=int, default=0, help="Padding value (default: 0)"
+        "--pad-value", type=int, default=2, help="Padding token ID (default: 2 = <|pad|>)"
+    )
+    parser.add_argument(
+        "-g",
+        "--group-size",
+        type=int,
+        default=1_000,
+        help="Merge every N packed chunks into one tensor, <=0 to disable (default: 1000)",
     )
     parser.add_argument(
         "--log-level",
@@ -95,9 +109,14 @@ def main():
 
     print(f"\nStart caching...")
     if args.pack_size > 0:
-        print(f"  pack_size={args.pack_size}, pad_value={args.pad_value}")
+        algo = args.pack_algo or "bfd"
+        print(f"  pack_size={args.pack_size}, pad_value={args.pad_value}, algo={algo}")
     else:
         print(f"  no packing")
+    if args.group_size > 0:
+        print(f"  group_size={args.group_size} chunks per tensor")
+    else:
+        print(f"  no grouping")
 
     cache_jsonl(
         files=jsonl_files,
@@ -105,6 +124,8 @@ def main():
         processor=processor,
         pack_size=args.pack_size,
         pad_value=args.pad_value,
+        group_size=args.group_size,
+        pack_algo=args.pack_algo,
     )
     print(f"\nDone! Output saved to {output_dir}")
 

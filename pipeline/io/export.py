@@ -5,13 +5,16 @@ import logging
 import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
+
+import torch
 from datasets import Dataset
+from torch import Tensor
 from tqdm import tqdm
 
 from pipeline.io.file_scanner import FileScanner
 from pipeline.io.hdf5_handler import HDF5Handler
 from pipeline.processors import BaseProcessor
-from pipeline.packing import pack_tensors
+from pipeline.packing import pack_tensors, BasePacker
 from pipeline.utils import error_handler
 
 logger = logging.getLogger(__name__)
@@ -75,6 +78,32 @@ def export_dataset(
     return output_files
 
 
+def merge_tensors(
+    tensors: List[Tensor],
+    group_size: int,
+) -> List[Tensor]:
+    """Merge a list of tensors into fewer larger tensors.
+
+    Concatenates every group_size consecutive tensors into one merged
+    tensor. This reduces the number of shm blocks when loading.
+
+    Args:
+        tensors: List of 1D tensors.
+        group_size: Number of tensors to merge into each group.
+
+    Returns:
+        List of merged tensors.
+    """
+    if not tensors:
+        return []
+
+    merged: List[Tensor] = []
+    for i in range(0, len(tensors), group_size):
+        merged.append(torch.cat(tensors[i : i + group_size]))
+
+    return merged
+
+
 @error_handler()
 def cache_jsonl(
     files: List[str],
@@ -83,6 +112,8 @@ def cache_jsonl(
     *,
     pack_size: int = -1,
     pad_value: int = 0,
+    group_size: int = 1_000,
+    pack_algo: Optional[str] = None,
 ) -> List[str]:
     """Tokenize JSONL files and pack them into HDF5 storage.
 
@@ -92,6 +123,10 @@ def cache_jsonl(
         processor: Initialized Processor instance.
         pack_size: Packing length, <=0 means no packing.
         pad_value: Padding value.
+        group_size: Merge every this many packed chunks into one tensor,
+            <=0 means no merging.
+        pack_algo: Packing algorithm: 'bfd' (default), 'ffd',
+            'greedy'. Only used when pack_size > 0.
 
     Returns:
         List of generated H5 file paths.
@@ -125,15 +160,26 @@ def cache_jsonl(
                     )
                     continue
 
+        if not arrows[output_keys[0]]:
+            logger.warning(f"No valid samples in {file_path}, skipping")
+            continue
+
         if pack_size > 0:
             dtypes = (
                 dict(processor.schema.output_fields)
                 if processor.schema is not None
                 else None
             )
-            output = pack_tensors(arrows, pack_size, pad_value, dtypes)
+            pad_values = {k: (0 if k == "position_ids" else (False if k.endswith("_mask") else pad_value)) for k in output_keys}
+            output = pack_tensors(arrows, pack_size, pad_value, dtypes, pad_values=pad_values, algo=pack_algo)
         else:
             output = arrows
+
+        if group_size > 0 and output[output_keys[0]]:
+            output = {
+                key: merge_tensors(tensors, group_size)
+                for key, tensors in output.items()
+            }
 
         h5_path = HDF5Handler.save(output_dir, file_name, output)
         output_files.append(h5_path)

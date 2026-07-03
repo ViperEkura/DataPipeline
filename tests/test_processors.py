@@ -18,6 +18,9 @@ class DummyTokenizer:
     def encode(self, text: str, add_special_tokens: bool = False):
         return [ord(c) for c in text]
 
+    def token_to_id(self, token: str):
+        return ord(token)
+
     def apply_chat_template(
         self, messages, add_generation_prompt=True, tokenize=True
     ):

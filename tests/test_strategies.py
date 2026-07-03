@@ -13,6 +13,9 @@ class DummyTokenizer:
     def encode(self, text: str, add_special_tokens: bool = False):
         return [ord(c) for c in text]
 
+    def token_to_id(self, token: str):
+        return ord(token)
+
 
 class DummyStrategy(PromptStrategy):
     def __init__(self, tokenizer):

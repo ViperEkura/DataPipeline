@@ -145,6 +145,9 @@ class DummyTokenizer:
     def encode(self, text: str, add_special_tokens: bool = False):
         return [ord(c) for c in text]
 
+    def token_to_id(self, token: str):
+        return ord(token)
+
     def apply_chat_template(
         self, messages, add_generation_prompt=True, tokenize=True
     ):
@@ -168,7 +171,7 @@ class TestPositionIds:
 
             processor = SFTProcessor(DummyTokenizer())
             out_dir = os.path.join(tmpdir, "cached")
-            cache_jsonl([jsonl_path], out_dir, processor, pack_size=-1)
+            cache_jsonl([jsonl_path], out_dir, processor, pack_size=-1, group_size=0)
 
             h5_path = os.path.join(out_dir, "data.h5")
             loaded = HDF5Handler.load(h5_path, share_memory=False)
