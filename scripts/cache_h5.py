@@ -1,11 +1,10 @@
-"""JSONL to H5 caching script.
+"""JSONL tokenization and caching script.
 
-Tokenize JSONL files and pack them into HDF5 format.
+Tokenize JSONL files and save as HDF5 or binary format.
 
 Usage:
     python scripts/cache_h5.py pt ./dataset/chinese-c4-pretrain
-    python scripts/cache_h5.py sft ./dataset/belle-sft --pack-size 4096 --strategy alpaca
-    python scripts/cache_h5.py sft ./dataset/Ling-Coder-sft --tokenizer ./my_tokenizer.json
+    python scripts/cache_h5.py sft ./dataset/belle-sft --pack-size 4096 --output-format bin
 """
 
 import argparse
@@ -29,7 +28,7 @@ def main():
         "-o",
         "--output-dir",
         default=None,
-        help="H5 output dir (default: <input_dir>/cached)",
+        help="Output dir (default: <input_dir>/cached)",
     )
     parser.add_argument(
         "-t",
@@ -72,6 +71,13 @@ def main():
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging level (default: INFO)",
+    )
+    parser.add_argument(
+        "-f",
+        "--output-format",
+        default="h5",
+        choices=["h5", "bin"],
+        help="Output format: h5 or bin (default: h5)",
     )
     args = parser.parse_args()
 
@@ -126,6 +132,7 @@ def main():
         pad_value=args.pad_value,
         group_size=args.group_size,
         pack_algo=args.pack_algo,
+        output_format=args.output_format,
     )
     print(f"\nDone! Output saved to {output_dir}")
 

@@ -13,6 +13,7 @@ from tqdm import tqdm
 
 from pipeline.io.file_scanner import FileScanner
 from pipeline.io.hdf5_handler import HDF5Handler
+from pipeline.io.writers import create_writer, BaseWriter
 from pipeline.processors import BaseProcessor
 from pipeline.packing import pack_tensors, BasePacker
 from pipeline.utils import error_handler
@@ -114,15 +115,16 @@ def cache_jsonl(
     pad_value: int = 0,
     group_size: int = 1_000,
     pack_algo: Optional[str] = None,
+    output_format: str = "h5",
 ) -> List[str]:
-    """Tokenize JSONL files and pack them into HDF5 storage.
+    """Tokenize JSONL files and save as HDF5 or binary.
 
     BFD packs in group_size-bounded batches to avoid O(N²), then all
-    packed chunks are merged and saved as one HDF5 file per input file.
+    packed chunks are merged and saved as one file per input file.
 
     Args:
         files: List of JSONL file paths.
-        output_dir: H5 output directory.
+        output_dir: Output directory.
         processor: Initialized Processor instance.
         pack_size: Packing length, <=0 means no packing.
         pad_value: Padding value.
@@ -130,9 +132,10 @@ def cache_jsonl(
             packing batch) and merge granularity, <=0 means no merging.
         pack_algo: Packing algorithm: 'bfd' (default), 'ffd',
             'greedy'. Only used when pack_size > 0.
+        output_format: ``"h5"`` or ``"bin"``.
 
     Returns:
-        List of generated H5 file paths.
+        List of generated file paths.
     """
     os.makedirs(output_dir, exist_ok=True)
     output_files: List[str] = []
@@ -206,8 +209,9 @@ def cache_jsonl(
         else:
             output = all_packed
 
-        h5_path = HDF5Handler.save(output_dir, file_name, output)
-        output_files.append(h5_path)
-        logger.info(f"Saved {h5_path}")
+        writer: BaseWriter = create_writer(output_format)
+        saved = writer.save(output_dir, file_name, output)
+        output_files.append(saved)
+        logger.info(f"Saved {saved}")
 
     return output_files
