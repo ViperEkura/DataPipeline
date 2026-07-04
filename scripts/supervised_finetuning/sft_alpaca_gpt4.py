@@ -6,10 +6,13 @@ def process_func(input_dict: dict):
     instruction = input_dict["instruction"]
     inp = input_dict.get("input", "")
     if inp:
-        query = instruction + "\n" + inp
+        content = instruction + "\n" + inp
     else:
-        query = instruction
-    return {"query": query, "response": input_dict["output"]}
+        content = instruction
+    return {"messages": [
+        {"role": "user", "content": content},
+        {"role": "assistant", "content": input_dict["output"]},
+    ]}
 
 
 if __name__ == "__main__":

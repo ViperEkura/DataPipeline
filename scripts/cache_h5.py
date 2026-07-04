@@ -34,8 +34,8 @@ def main():
     parser.add_argument(
         "-t",
         "--tokenizer",
-        default="./tokenizer.json",
-        help="Tokenizer path (default: ./tokenizer.json)",
+        default="./tokenizer",
+        help="Tokenizer dir (default: ./tokenizer)",
     )
     parser.add_argument(
         "-s",

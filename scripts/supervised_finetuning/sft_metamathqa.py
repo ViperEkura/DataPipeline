@@ -3,7 +3,10 @@ from pipeline import export_dataset
 
 
 def process_func(sample: dict) -> dict:
-    return {"query": sample["query"], "response": sample["response"]}
+    return {"messages": [
+        {"role": "user", "content": sample["query"]},
+        {"role": "assistant", "content": sample["response"]},
+    ]}
 
 
 if __name__ == "__main__":

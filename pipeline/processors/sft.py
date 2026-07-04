@@ -7,7 +7,7 @@ from torch import Tensor
 
 from pipeline.tokenize import AutoTokenizer
 from pipeline.strategies import PromptStrategy, ChatMLStrategy
-from pipeline.processors.base import BaseProcessor, ProcessorSchema, encode_with_mask
+from pipeline.processors.base import BaseProcessor, ProcessorSchema
 from pipeline.processors.factory import ProcessorFactory
 
 
@@ -15,20 +15,20 @@ from pipeline.processors.factory import ProcessorFactory
 class SFTProcessor(BaseProcessor):
     """Supervised fine-tuning data processor.
 
-    Supports two input formats:
+    Input formats:
       1. messages (recommended):
          ``{"messages": [{"role": "user", "content": "..."},
                          {"role": "assistant", "content": "..."}]}``
-         Multi-turn and system prompts are supported.
-         The tokenizer's ``apply_chat_template`` is used for rendering.
+         Multi-turn and system prompts are supported.  Each assistant
+         turn gets ``loss_mask = 1``; all other roles get 0.
       2. legacy query/response:
          ``{"query": "...", "response": "..."}``
-         Falls back to the configured PromptStrategy (ChatML by default).
+         Internally converted to messages.
 
     Output schema:
-        - sequence: int32 tensor - Combined token IDs (prompt + response)
-        - loss_mask: bool tensor - True for response tokens (compute loss)
-        - position_ids: int32 tensor - Per-sample position IDs starting from 0
+        - sequence: int32 tensor - Combined token IDs
+        - loss_mask: bool tensor - True for assistant response tokens
+        - position_ids: int32 tensor - Per-sample position IDs, start from 0
     """
 
     def __init__(
@@ -58,7 +58,10 @@ class SFTProcessor(BaseProcessor):
         if "messages" in input_dict:
             return self._process_messages(input_dict["messages"])
         if "query" in input_dict and "response" in input_dict:
-            return self._process_legacy(input_dict)
+            return self._process_messages([
+                {"role": "user", "content": input_dict["query"]},
+                {"role": "assistant", "content": input_dict["response"]},
+            ])
         raise KeyError(
             "Input must contain 'messages' or 'query'/'response' pair"
         )
@@ -69,38 +72,19 @@ class SFTProcessor(BaseProcessor):
         if messages[-1]["role"] != "assistant":
             raise ValueError("Last message must have role 'assistant'")
 
-        last_asst_idx = max(
-            i for i, m in enumerate(messages) if m["role"] == "assistant"
-        )
-
-        prompt_tokens = self.tokenizer.apply_chat_template(
-            messages[:last_asst_idx],
-            add_generation_prompt=True,
-            tokenize=True,
-        )
-
-        resp_content = messages[last_asst_idx]["content"]
-        im_end = getattr(self.tokenizer, "im_end", "<|im_end|>")
-        resp_tokens = self.tokenizer.encode(
-            f"{resp_content}{im_end}\n", add_special_tokens=False
-        )
-
-        tokens, loss_mask = encode_with_mask(prompt_tokens, resp_tokens)
-        position_ids = torch.arange(len(tokens), dtype=torch.int32)
-        return {"sequence": tokens, "loss_mask": loss_mask, "position_ids": position_ids}
-
-    def _process_legacy(self, input_dict: Dict[str, Any]) -> Dict[str, Tensor]:
         strategy = self.strategy or ChatMLStrategy(self.tokenizer)
 
-        query_tokens = self.tokenizer.encode(input_dict["query"])
-        response_tokens = self.tokenizer.encode(input_dict["response"])
+        prompt, resp = strategy.format_messages(messages)
 
-        prompt = strategy.assemble_prompt(query_tokens)
-        response = strategy.assemble_response(response_tokens)
-
-        tokens, loss_mask = encode_with_mask(prompt, response)
-        position_ids = torch.arange(len(tokens), dtype=torch.int32)
-        return {"sequence": tokens, "loss_mask": loss_mask, "position_ids": position_ids}
+        sequence = torch.tensor(prompt + resp, dtype=torch.int32)
+        loss_mask = torch.zeros(len(sequence), dtype=torch.bool)
+        loss_mask[len(prompt) :] = True
+        position_ids = torch.arange(len(sequence), dtype=torch.int32)
+        return {
+            "sequence": sequence,
+            "loss_mask": loss_mask,
+            "position_ids": position_ids,
+        }
 
     @property
     def output_keys(self) -> List[str]:
