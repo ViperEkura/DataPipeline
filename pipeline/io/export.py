@@ -116,6 +116,7 @@ def cache_jsonl(
     group_size: int = 1_000,
     pack_algo: Optional[str] = None,
     output_format: str = "h5",
+    batch_size: int = 1000,
 ) -> List[str]:
     """Tokenize JSONL files and save as HDF5 or binary.
 
@@ -133,6 +134,8 @@ def cache_jsonl(
         pack_algo: Packing algorithm: 'bfd' (default), 'ffd',
             'greedy'. Only used when pack_size > 0.
         output_format: ``"h5"`` or ``"bin"``.
+        batch_size: Number of lines to batch-process together for parallel
+            tokenization via encode_batch (default: 1000).
 
     Returns:
         List of generated file paths.
@@ -157,34 +160,45 @@ def cache_jsonl(
         arrows_batch: Dict[str, List] = {key: [] for key in output_keys}
         batch_tokens: int = 0
 
+        buf: List[str] = []
+        buf_num: int = 0
+
+        def flush_buf():
+            nonlocal batch_tokens
+            if not buf:
+                return
+            samples = []
+            for line in buf:
+                try:
+                    samples.append(json.loads(line))
+                except json.JSONDecodeError as e:
+                    logger.warning(f"JSON decode error, skipping: {e}")
+            buf.clear()
+            if not samples:
+                return
+            results = processor.process_batch(samples) if hasattr(processor, "process_batch") else [processor.process(s) for s in samples]
+            for result in results:
+                if result is not None:
+                    for key in output_keys:
+                        arrows_batch[key].append(result[key])
+                    if target_tokens > 0:
+                        batch_tokens += int(result[output_keys[0]].shape[0])
+
         with open(file_path, "r", encoding="utf-8") as f:
             for line_num, line in enumerate(
                 tqdm(f, desc=f"Processing {file_name}", leave=False), start=1
             ):
-                try:
-                    result = processor.process(json.loads(line))
-                    if result is not None:
+                buf.append(line)
+                if len(buf) >= batch_size:
+                    flush_buf()
+                    if target_tokens > 0 and batch_tokens >= target_tokens:
+                        packed = pack_tensors(arrows_batch, pack_size, pad_value, dtypes, pad_values=pad_values, algo=pack_algo)
                         for key in output_keys:
-                            arrows_batch[key].append(result[key])
-                        if target_tokens > 0:
-                            batch_tokens += int(result[output_keys[0]].shape[0])
-                except json.JSONDecodeError as e:
-                    logger.warning(
-                        f"JSON decode error in {file_path} line {line_num}: {e}. Skipping line."
-                    )
-                    continue
-                except Exception as e:
-                    logger.warning(
-                        f"Unexpected error processing line {line_num} in {file_path}: {e}. Skipping line."
-                    )
-                    continue
+                            all_packed[key].extend(packed[key])
+                            arrows_batch[key] = []
+                        batch_tokens = 0
 
-                if target_tokens > 0 and batch_tokens >= target_tokens:
-                    packed = pack_tensors(arrows_batch, pack_size, pad_value, dtypes, pad_values=pad_values, algo=pack_algo)
-                    for key in output_keys:
-                        all_packed[key].extend(packed[key])
-                        arrows_batch[key] = []
-                    batch_tokens = 0
+        flush_buf()
 
         if arrows_batch[output_keys[0]]:
             if pack_size > 0:

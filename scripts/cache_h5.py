@@ -73,6 +73,12 @@ def main():
         help="Logging level (default: INFO)",
     )
     parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=1000,
+        help="Lines per batch for parallel tokenization via encode_batch (default: 1000)",
+    )
+    parser.add_argument(
         "-f",
         "--output-format",
         default="h5",
@@ -133,6 +139,7 @@ def main():
         group_size=args.group_size,
         pack_algo=args.pack_algo,
         output_format=args.output_format,
+        batch_size=args.batch_size,
     )
     print(f"\nDone! Output saved to {output_dir}")
 

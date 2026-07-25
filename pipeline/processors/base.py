@@ -82,6 +82,21 @@ class BaseProcessor(ABC):
         """Return list of output tensor key names."""
         pass
 
+    def process_batch(self, input_dicts: List[Dict[str, Any]]) -> List[Dict[str, Tensor]]:
+        """Process a batch of input samples.
+
+        Default implementation calls process() for each sample.
+        Subclasses should override for efficient batch processing
+        (e.g., using tokenizer.encode_batch).
+
+        Args:
+            input_dicts: List of input dictionaries.
+
+        Returns:
+            List of output dictionaries mapping output key names to tensors.
+        """
+        return [self.process(d) for d in input_dicts]
+
     def validate_input(self, input_dict: Dict[str, Any]) -> None:
         """Validate input against schema before processing.
 
