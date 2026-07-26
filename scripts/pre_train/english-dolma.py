@@ -7,5 +7,4 @@ if __name__ == "__main__":
         dataset=dataset["train"],
         output_dir="./dataset",
         output_prefix="english-dolma-30b-pretrain",
-        max_chunks=18,
     )
