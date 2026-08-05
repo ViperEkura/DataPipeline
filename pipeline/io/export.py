@@ -83,6 +83,7 @@ def cache_jsonl(
     *,
     pack_size: int = -1,
     pad_value: int = 0,
+    batch_size: int = 256,
 ) -> List[str]:
     """Tokenize JSONL files and pack them into HDF5 storage.
 
@@ -92,6 +93,7 @@ def cache_jsonl(
         processor: Initialized Processor instance.
         pack_size: Packing length, <=0 means no packing.
         pad_value: Padding value.
+        batch_size: Number of records passed to the processor at once.
 
     Returns:
         List of generated H5 file paths.
@@ -105,25 +107,48 @@ def cache_jsonl(
 
         arrows: Dict[str, List] = {key: [] for key in output_keys}
 
+        def append_batch(batch):
+            items = [item for _, item in batch]
+            try:
+                results = processor.process_batch(items)
+                if len(results) != len(items):
+                    raise RuntimeError(
+                        "Batch processor returned a different number of results"
+                    )
+            except Exception:
+                results = []
+                for line_num, item in batch:
+                    try:
+                        results.append(processor.process(item))
+                    except Exception as e:
+                        logger.warning(
+                            f"Unexpected error processing line {line_num} "
+                            f"in {file_path}: {e}. Skipping line."
+                        )
+                        results.append(None)
+
+            for result in results:
+                if result is not None:
+                    for key in output_keys:
+                        arrows[key].append(result[key])
+
+        batch = []
+        batch_size = max(1, batch_size)
         with open(file_path, "r", encoding="utf-8") as f:
             for line_num, line in enumerate(
                 tqdm(f, desc=f"Processing {file_name}", leave=False), start=1
             ):
                 try:
-                    result = processor.process(json.loads(line))
-                    if result is not None:
-                        for key in output_keys:
-                            arrows[key].append(result[key])
+                    batch.append((line_num, json.loads(line)))
+                    if len(batch) >= batch_size:
+                        append_batch(batch)
+                        batch = []
                 except json.JSONDecodeError as e:
                     logger.warning(
                         f"JSON decode error in {file_path} line {line_num}: {e}. Skipping line."
                     )
-                    continue
-                except Exception as e:
-                    logger.warning(
-                        f"Unexpected error processing line {line_num} in {file_path}: {e}. Skipping line."
-                    )
-                    continue
+            if batch:
+                append_batch(batch)
 
         if pack_size > 0:
             dtypes = (

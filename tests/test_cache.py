@@ -29,6 +29,16 @@ class DummyProcessor(BaseProcessor):
         }
 
 
+class BatchTrackingProcessor(DummyProcessor):
+    def __init__(self):
+        super().__init__()
+        self.batch_sizes = []
+
+    def process_batch(self, items):
+        self.batch_sizes.append(len(items))
+        return super().process_batch(items)
+
+
 class TestCacheJsonl:
     def test_basic_cache_functionality(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -121,3 +131,19 @@ class TestCacheJsonl:
                 pad_value=0,
             )
             assert len(output_files) == 1
+
+    def test_uses_configured_batch_size(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            jsonl_path = os.path.join(tmpdir, "test.jsonl")
+            with open(jsonl_path, "w", encoding="utf-8") as f:
+                for i in range(5):
+                    f.write(json.dumps({"text": str(i)}) + "\n")
+
+            processor = BatchTrackingProcessor()
+            cache_jsonl(
+                files=[jsonl_path],
+                output_dir=tmpdir,
+                processor=processor,
+                batch_size=2,
+            )
+            assert processor.batch_sizes == [2, 2, 1]

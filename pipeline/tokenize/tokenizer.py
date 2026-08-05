@@ -3,6 +3,7 @@ Tokenizer module with BPE implementation and auto-loading support.
 """
 
 from dataclasses import dataclass
+from functools import cached_property
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -102,6 +103,10 @@ class ChatTemplate:
         if self.special_tokens is None:
             self.special_tokens = {}
 
+    @cached_property
+    def _compiled(self) -> Template:
+        return Template(self.template_str)
+
     @classmethod
     def from_string(
         cls,
@@ -142,8 +147,7 @@ class ChatTemplate:
         if system_prompt is not None:
             variables["system_prompt"] = system_prompt
 
-        jinja_template = Template(self.template_str)
-        return jinja_template.render(**variables)
+        return self._compiled.render(**variables)
 
 
 
@@ -326,7 +330,9 @@ class AutoTokenizer:
             KeyError: If template name is not registered.
         """
         if isinstance(template, str):
-            self._chat_template = ChatTemplate.from_string(template)
+            self._chat_template = ChatTemplate.from_string(
+                template, special_tokens=self._special_token_map
+            )
         elif isinstance(template, ChatTemplate):
             self._chat_template = template
         else:

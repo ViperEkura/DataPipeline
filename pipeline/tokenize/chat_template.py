@@ -3,6 +3,7 @@ Chat template module with Jinja2 rendering support.
 """
 
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any, Dict, List, Optional
 
 from jinja2 import Template
@@ -31,6 +32,10 @@ class ChatTemplate:
     description: str = ""
     default_variables: Dict[str, Any] = field(default_factory=dict)
     special_tokens: Dict[str, str] = field(default_factory=dict)
+
+    @cached_property
+    def _compiled(self) -> Template:
+        return Template(self.template_str)
 
     @classmethod
     def from_string(
@@ -79,8 +84,7 @@ class ChatTemplate:
         if system_prompt is not None:
             variables["system_prompt"] = system_prompt
 
-        jinja_template = Template(self.template_str)
-        return jinja_template.render(**variables)
+        return self._compiled.render(**variables)
 
 
 # Default ChatML template

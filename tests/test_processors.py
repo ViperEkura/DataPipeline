@@ -15,7 +15,9 @@ from pipeline.processors import (
 class DummyTokenizer:
     im_end = "<|im_end|>"
 
-    def encode(self, text: str, add_special_tokens: bool = False):
+    def encode(self, text, add_special_tokens: bool = False):
+        if isinstance(text, list):
+            return [[ord(c) for c in item] for item in text]
         return [ord(c) for c in text]
 
     def apply_chat_template(
@@ -49,6 +51,16 @@ class TestPreTrainProcessor:
     def test_process_adds_eos(self):
         result = PreTrainProcessor(DummyTokenizer()).process({"text": "a"})
         assert len(result["sequence"]) > 0
+
+    def test_process_batch_matches_single(self):
+        processor = PreTrainProcessor(DummyTokenizer())
+        items = [{"text": "hello"}, {"text": "world"}]
+        batch = processor.process_batch(items)
+        single = [processor.process(item) for item in items]
+        assert all(
+            torch.equal(batch_item["sequence"], single_item["sequence"])
+            for batch_item, single_item in zip(batch, single)
+        )
 
 
 class TestSFTProcessor:
@@ -121,6 +133,23 @@ class TestSFTProcessor:
         })
         assert "sequence" in result
 
+    def test_process_batch_matches_single(self):
+        processor = SFTProcessor(DummyTokenizer())
+        items = [
+            {
+                "messages": [
+                    {"role": "user", "content": "q1"},
+                    {"role": "assistant", "content": "a1"},
+                ]
+            },
+            {"query": "q2", "response": "a2"},
+        ]
+        batch = processor.process_batch(items)
+        single = [processor.process(item) for item in items]
+        for batch_item, single_item in zip(batch, single):
+            for key in processor.output_keys:
+                assert torch.equal(batch_item[key], single_item[key])
+
     def test_messages_empty_raises(self):
         with pytest.raises(ValueError, match="Messages list is empty"):
             SFTProcessor(DummyTokenizer()).process({"messages": []})
@@ -172,6 +201,18 @@ class TestDPOProcessor:
         )
         assert result["chosen_mask"].dtype == torch.bool
         assert result["rejected_mask"].dtype == torch.bool
+
+    def test_process_batch_matches_single(self):
+        processor = DPOProcessor(DummyTokenizer())
+        items = [
+            {"query": "q1", "chosen": "yes", "rejected": "no"},
+            {"query": "q2", "chosen": "good", "rejected": "bad"},
+        ]
+        batch = processor.process_batch(items)
+        single = [processor.process(item) for item in items]
+        for batch_item, single_item in zip(batch, single):
+            for key in processor.output_keys:
+                assert torch.equal(batch_item[key], single_item[key])
 
 
 class TestProcessorFactory:

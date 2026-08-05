@@ -76,6 +76,12 @@ class BaseProcessor(ABC):
         """
         pass
 
+    def process_batch(
+        self, input_dicts: List[Dict[str, Any]]
+    ) -> List[Dict[str, Tensor]]:
+        """Process a batch, falling back to the single-record implementation."""
+        return [self.process(input_dict) for input_dict in input_dicts]
+
     @property
     @abstractmethod
     def output_keys(self) -> List[str]:

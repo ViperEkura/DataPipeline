@@ -54,6 +54,12 @@ def main():
         "--pad-value", type=int, default=0, help="Padding value (default: 0)"
     )
     parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=256,
+        help="Records tokenized per batch (default: 256)",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
@@ -105,6 +111,7 @@ def main():
         processor=processor,
         pack_size=args.pack_size,
         pad_value=args.pad_value,
+        batch_size=args.batch_size,
     )
     print(f"\nDone! Output saved to {output_dir}")
 
