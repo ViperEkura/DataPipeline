@@ -28,7 +28,13 @@ Usage::
 from pipeline.pipeline import Pipeline, PipelineConfig, Stage, TransformStage
 from pipeline.tokenize import AutoTokenizer, ChatTemplate, train_bpe_tokenizer
 from pipeline.text import TextNormalizer
-from pipeline.packing import SequencePacker
+from pipeline.packing import (
+    GreedyPacker,
+    FfDPacker,
+    BfdPacker,
+    BasePacker,
+    pack_tensors,
+)
 
 # I/O module
 from pipeline.io import FileScanner, HDF5Handler, export_dataset, cache_jsonl
@@ -70,7 +76,11 @@ __all__ = [
     "train_bpe_tokenizer",
     # Text processing
     "TextNormalizer",
-    "SequencePacker",
+    "GreedyPacker",
+    "FfDPacker",
+    "BfdPacker",
+    "BasePacker",
+    "pack_tensors",
     # I/O
     "FileScanner",
     "HDF5Handler",

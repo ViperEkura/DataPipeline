@@ -140,19 +140,28 @@ class TestHDF5Handler:
 
 
 class DummyTokenizer:
-    im_end = "<|im_end|>"
+    def __init__(self):
+        self._special_token_map = {}
+        self._chat_template = None
 
     def encode(self, text: str, add_special_tokens: bool = False):
         return [ord(c) for c in text]
 
-    def apply_chat_template(
-        self, messages, add_generation_prompt=True, tokenize=True
-    ):
+    def decode(self, tokens, skip_special_tokens=True):
+        return "".join(chr(t) for t in tokens)
+
+    def token_to_id(self, token: str):
+        return ord(token)
+
+    def set_chat_template(self, template):
+        self._chat_template = template
+
+    def apply_chat_template(self, messages, add_generation_prompt=True, tokenize=True):
         text = ""
         for m in messages:
-            text += f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n"
+            text += f"<｜im▁start｜>{m['role']}\n{m['content']}<｜im▁end｜>\n"
         if add_generation_prompt:
-            text += "<|im_start|>assistant\n"
+            text += "<｜im▁start｜>assistant\n"
         return self.encode(text) if tokenize else text
 
 
@@ -168,7 +177,7 @@ class TestPositionIds:
 
             processor = SFTProcessor(DummyTokenizer())
             out_dir = os.path.join(tmpdir, "cached")
-            cache_jsonl([jsonl_path], out_dir, processor, pack_size=-1)
+            cache_jsonl([jsonl_path], out_dir, processor, pack_size=-1, group_size=0)
 
             h5_path = os.path.join(out_dir, "data.h5")
             loaded = HDF5Handler.load(h5_path, share_memory=False)

@@ -1,11 +1,10 @@
-"""JSONL to H5 caching script.
+"""JSONL tokenization and caching script.
 
-Tokenize JSONL files and pack them into HDF5 format.
+Tokenize JSONL files and save as HDF5 or binary format.
 
 Usage:
     python scripts/cache_h5.py pt ./dataset/chinese-c4-pretrain
-    python scripts/cache_h5.py sft ./dataset/belle-sft --pack-size 4096 --strategy alpaca
-    python scripts/cache_h5.py sft ./dataset/Ling-Coder-sft --tokenizer ./my_tokenizer.json
+    python scripts/cache_h5.py sft ./dataset/belle-sft --pack-size 4096 --output-format bin
 """
 
 import argparse
@@ -29,19 +28,26 @@ def main():
         "-o",
         "--output-dir",
         default=None,
-        help="H5 output dir (default: <input_dir>/cached)",
+        help="Output dir (default: <input_dir>/cached)",
     )
     parser.add_argument(
         "-t",
         "--tokenizer",
-        default="./tokenizer.json",
-        help="Tokenizer path (default: ./tokenizer.json)",
+        default="./tokenizer",
+        help="Tokenizer dir (default: ./tokenizer)",
     )
     parser.add_argument(
         "-s",
         "--strategy",
         default=None,
         help="Prompt strategy: chatml, alpaca (default: chatml)",
+    )
+    parser.add_argument(
+        "-a",
+        "--pack-algo",
+        default=None,
+        choices=[None, "bfd", "ffd", "greedy"],
+        help="Packing algorithm: bfd (default), ffd, greedy",
     )
     parser.add_argument(
         "-p",
@@ -51,7 +57,14 @@ def main():
         help="Pack size, <=0 to disable (default: -1)",
     )
     parser.add_argument(
-        "--pad-value", type=int, default=0, help="Padding value (default: 0)"
+        "--pad-value", type=int, default=2, help="Padding token ID (default: 2 = <|pad|>)"
+    )
+    parser.add_argument(
+        "-g",
+        "--group-size",
+        type=int,
+        default=1_000,
+        help="Merge every N packed chunks into one tensor, <=0 to disable (default: 1000)",
     )
     parser.add_argument(
         "--batch-size",
@@ -64,6 +77,19 @@ def main():
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging level (default: INFO)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=1000,
+        help="Lines per batch for parallel tokenization via encode_batch (default: 1000)",
+    )
+    parser.add_argument(
+        "-f",
+        "--output-format",
+        default="h5",
+        choices=["h5", "bin"],
+        help="Output format: h5 or bin (default: h5)",
     )
     args = parser.parse_args()
 
@@ -101,9 +127,14 @@ def main():
 
     print(f"\nStart caching...")
     if args.pack_size > 0:
-        print(f"  pack_size={args.pack_size}, pad_value={args.pad_value}")
+        algo = args.pack_algo or "bfd"
+        print(f"  pack_size={args.pack_size}, pad_value={args.pad_value}, algo={algo}")
     else:
         print(f"  no packing")
+    if args.group_size > 0:
+        print(f"  group_size={args.group_size} chunks per tensor")
+    else:
+        print(f"  no grouping")
 
     cache_jsonl(
         files=jsonl_files,
@@ -111,6 +142,9 @@ def main():
         processor=processor,
         pack_size=args.pack_size,
         pad_value=args.pad_value,
+        group_size=args.group_size,
+        pack_algo=args.pack_algo,
+        output_format=args.output_format,
         batch_size=args.batch_size,
     )
     print(f"\nDone! Output saved to {output_dir}")

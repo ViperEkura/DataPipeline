@@ -2,12 +2,9 @@ from datasets import load_dataset
 from pipeline import export_dataset
 
 if __name__ == "__main__":
-    dataset = load_dataset(
-        "opencsg/chinese-cosmopedia",
-    )
+    dataset = load_dataset("emozilla/dolma-v1_7-30B")
     export_dataset(
         dataset=dataset["train"],
         output_dir="./dataset",
-        output_prefix="chinese-cosmopedia-pretrain",
-        chunk_size=1_000_000,
+        output_prefix="english-dolma-30b-pretrain",
     )

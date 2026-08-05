@@ -10,8 +10,29 @@ from pipeline.strategies import (
 
 
 class DummyTokenizer:
+    def __init__(self):
+        self._special_token_map = {}
+        self._chat_template = None
+
     def encode(self, text: str, add_special_tokens: bool = False):
         return [ord(c) for c in text]
+
+    def decode(self, tokens, skip_special_tokens=True):
+        return "".join(chr(t) for t in tokens)
+
+    def token_to_id(self, token: str):
+        return ord(token)
+
+    def set_chat_template(self, template):
+        self._chat_template = template
+
+    def apply_chat_template(self, messages, add_generation_prompt=True, tokenize=True):
+        text = ""
+        for m in messages:
+            text += f"<｜im▁start｜>{m['role']}\n{m['content']}<｜im▁end｜>\n"
+        if add_generation_prompt:
+            text += "<｜im▁start｜>assistant\n"
+        return self.encode(text) if tokenize else text
 
 
 class DummyStrategy(PromptStrategy):
@@ -62,11 +83,8 @@ class TestChatMLStrategy:
         tk = DummyTokenizer()
         strategy = ChatMLStrategy(tk)
         prompt = strategy.assemble_prompt(tk.encode("hi"))
-        # prompt 末尾应该是 assistant_start 的 token ids
-        assert (
-            prompt[-len(strategy._assistant_start_ids) :]
-            == strategy._assistant_start_ids
-        )
+        assistant_start = tk.encode("<｜im▁start｜>assistant\n")
+        assert prompt[-len(assistant_start):] == assistant_start
 
 
 class TestAlpacaStrategy:

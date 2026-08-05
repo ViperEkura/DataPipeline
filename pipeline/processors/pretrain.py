@@ -44,11 +44,11 @@ class PreTrainProcessor(BaseProcessor):
         return {"sequence": torch.tensor(tokens, dtype=torch.int32)}
 
     def process_batch(self, input_dicts: List[Dict[str, Any]]) -> List[Dict[str, Tensor]]:
-        texts = [f"{item['text']}{self._eos_token}" for item in input_dicts]
-        encoded = self.tokenizer.encode(texts)
+        texts = [f"{d['text']}{self._eos_token}" for d in input_dicts]
+        batch_tokens = self.tokenizer.encode(texts)
         return [
             {"sequence": torch.tensor(tokens, dtype=torch.int32)}
-            for tokens in encoded
+            for tokens in batch_tokens
         ]
 
     @property

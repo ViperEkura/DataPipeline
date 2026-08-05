@@ -244,22 +244,18 @@ class AutoTokenizer:
                 "Tokenizer not initialized. Load or create a tokenizer first."
             )
 
-        if isinstance(tokens, str):
-            encoded = self._tokenizer.encode(
-                tokens,
-                is_pretokenized=is_pretokenized,
-                add_special_tokens=add_special_tokens,
-            )
-            return encoded.ids if out_ids else encoded.tokens
-        else:
-            encoded_list = self._tokenizer.encode_batch(
-                tokens,
-                is_pretokenized=is_pretokenized,
-                add_special_tokens=add_special_tokens,
-            )
-            return [
-                encoded.ids if out_ids else encoded.tokens for encoded in encoded_list
-            ]
+        single = isinstance(tokens, str)
+        if single:
+            tokens = [tokens]
+        encoded_list = self._tokenizer.encode_batch(
+            tokens,
+            is_pretokenized=is_pretokenized,
+            add_special_tokens=add_special_tokens,
+        )
+        result = [
+            encoded.ids if out_ids else encoded.tokens for encoded in encoded_list
+        ]
+        return result[0] if single else result
 
     def decode(self, tokens: List[int], skip_special_tokens: bool = True) -> str:
         """Decode token IDs to text."""
@@ -269,6 +265,12 @@ class AutoTokenizer:
             )
 
         return self._tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
+
+    def token_to_id(self, token: str) -> Optional[int]:
+        """Convert a token string to its integer ID."""
+        if self._tokenizer is None:
+            raise RuntimeError("Tokenizer not initialized.")
+        return self._tokenizer.token_to_id(token)
 
     def __len__(self) -> int:
         if self._tokenizer is None:

@@ -16,10 +16,10 @@ def process_func(input_dict: dict):
 
 
 if __name__ == "__main__":
-    dataset = load_dataset("llm-wizard/alpaca-gpt4-data")
+    dataset = load_dataset("llm-wizard/alpaca-gpt4-data-zh")
     export_dataset(
         dataset=dataset["train"],
         output_dir="./dataset",
-        output_prefix="alpaca-gpt4-data",
+        output_prefix="alpaca-gpt4-data-zh",
         process_func=process_func,
     )
